@@ -1,25 +1,9 @@
-from typing import Tuple, Sequence, Dict, Type
+from typing import Tuple, Sequence, Dict
 import torch
 
-from src.ctc import SampleItem, CTC
-from src.comparable import Comparable
-
-
-class ClassicSampleItem(SampleItem):
-    def __init__(self,
-                 input: Sequence[float],
-                 target: Sequence[Comparable],
-                 dictionary: Dict[Comparable, int]
-                 ):
-        super().__init__(input, target, dictionary)
-
-    def preprocess_target(self,
-                          target: Sequence[Comparable],
-                          dictionary: Dict[Comparable, int]
-                          ):
-        self.p = []
-        for el in target:
-            self.p.append(dictionary[el])
+from .ctc import CTC
+from ..sample_item import SampleItem, ClassicSampleItem
+from ..utils import Comparable
 
 
 class ClassicCTC(CTC):

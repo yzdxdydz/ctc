@@ -7,25 +7,9 @@ from abc import ABC, abstractmethod
 from typing import Sequence, Tuple, Dict, Type, Optional
 import torch
 
-from src.comparable import Comparable
-from src.rnn import RNN
-
-
-class SampleItem(ABC):
-    def __init__(self,
-                 input: Sequence[float],
-                 target: Sequence[Comparable],
-                 dictionary: Dict[Comparable, int]
-                 ):
-        self.x = input
-        self.preprocess_target(target, dictionary)
-
-    @abstractmethod
-    def preprocess_target(self,
-                          target: Sequence[Comparable],
-                          dictionary: Dict[Comparable, int]
-                          ):
-        pass
+from .. utils import Comparable
+from .. rnn import RNN
+from ..sample_item import SampleItem
 
 
 class CTC(ABC):
@@ -40,12 +24,15 @@ class CTC(ABC):
         self.net = None
         self.set_item_type()
 
-    def load_net_from_file(self, file_path=str):
-        self.net.load_state_dict(torch.load(file_path,
-                                            map_location=self.device
-                                            )
-                                 )
-        self.net.eval()
+    def load_net_from_file(self, file_path: str):
+        try:
+            self.net.load_state_dict(torch.load(file_path,
+                                                map_location=self.device))
+            self.net.eval()
+        except FileNotFoundError:
+            print(f"File {file_path} not found.")
+        except Exception as e:
+            print(f"Error loading network from file: {e}")
 
     def create_net(self,
                    rnn: Type[RNN],
