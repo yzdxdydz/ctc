@@ -34,6 +34,14 @@ class CTC(ABC):
         except Exception as e:
             print(f"Error loading network from file: {e}")
 
+    def save_net_to_file(self, file_path: str):
+        try:
+            torch.save(self.net.state_dict(), file_path)
+        except FileNotFoundError:
+            print(f"File {file_path} not found.")
+        except Exception as e:
+            print(f"Error saving network to file: {e}")
+
     def create_net(self,
                    rnn: Type[RNN],
                    input_size: int,
