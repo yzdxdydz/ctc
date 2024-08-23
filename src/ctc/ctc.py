@@ -24,23 +24,31 @@ class CTC(ABC):
         self.net = None
         self.set_item_type()
 
-    def load_net_from_file(self, file_path: str):
+    def load_net_from_file(self, file_path: str, to_train: bool = True):
         try:
-            self.net.load_state_dict(torch.load(file_path,
-                                                map_location=self.device))
-            self.net.eval()
+            self.net = torch.load(file_path, map_location=self.device)
+            if to_train:
+                self.net.train()
+            else:
+                self.net.eval()
         except FileNotFoundError:
             print(f"File {file_path} not found.")
+            return -1
         except Exception as e:
             print(f"Error loading network from file: {e}")
+            return -1
+        return 0
 
     def save_net_to_file(self, file_path: str):
         try:
-            torch.save(self.net.state_dict(), file_path)
+            torch.save(self.net, file_path)
         except FileNotFoundError:
             print(f"File {file_path} not found.")
+            return -1
         except Exception as e:
             print(f"Error saving network to file: {e}")
+            return -1
+        return 0
 
     def create_net(self,
                    rnn: Type[RNN],

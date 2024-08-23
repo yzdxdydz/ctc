@@ -1,9 +1,16 @@
 venv/
-
-main.py
-
 .idea
-
 .DS_Store
 
+# for test
+main.py
 test_model
+entries
+model_trained
+
+# datasets
+datasets/
+
+# notebook checkpoints
+.ipynb_checkpoints/
+
