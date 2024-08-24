@@ -27,7 +27,7 @@ class MatrixCTC(CTC):
         gamma[0] /= c
         sum_log_c = torch.log(c)
         for t in range(1, y.shape[0]):
-            gamma[t] = torch.matmul(mat_a, gamma[t - 1]) * y_mod[t]
+            gamma[t] = torch.mm(mat_a, gamma[t - 1]) * y_mod[t]
             c = gamma[t].sum()
             sum_log_c += torch.log(c)
             gamma[t] /= c

@@ -5,6 +5,7 @@ This file provides the abstract base class for CTC algorithms.
 
 from abc import ABC, abstractmethod
 from typing import Sequence, Tuple, Dict, Type, Optional
+from time import time
 import torch
 
 from .. utils import Comparable
@@ -18,9 +19,17 @@ class CTC(ABC):
                  acceleration: bool = True
                  ):
         self.dictionary = dictionary
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() and acceleration else "cpu"
-        )
+
+        if acceleration:
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+            elif torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            else:
+                self.device = torch.device("cpu")
+        else:
+            self.device = torch.device("cpu")
+
         self.net = None
         self.set_item_type()
 
@@ -73,7 +82,8 @@ class CTC(ABC):
               sr: int = 100,
               scheduler_type: Optional[
                   Type[torch.optim.lr_scheduler._LRScheduler]] = None,
-              grad_type: str = "u"
+              grad_type: str = "u",
+              batch_size: int = 1 << 7
               ):
 
         if self.net is None:
@@ -91,6 +101,15 @@ class CTC(ABC):
                                   self.dictionary
                                   ) for item in training_sample]
 
+        batch_count = len(tr_data) // batch_size
+        batches = [tr_data[batch_size*i:batch_size*i+batch_size]
+                   for i in range(batch_count)]
+        if len(tr_data) % batch_size != 0:
+            batches.append(tr_data[batch_size*batch_count:])
+            batch_count += 1
+
+        print(f"Total batch count: {batch_count}")
+
         if grad_type in ["u", "y", "v"]:
             g_type = grad_type
         else:
@@ -98,35 +117,54 @@ class CTC(ABC):
             g_type = "u"
 
         for epoch in range(epochs):
-            optimizer.zero_grad()
-            loss = 0
-            for item in tr_data:
-                x = torch.tensor(item.x,
-                                 device=self.device,
-                                 dtype=torch.float
-                                 )
-                if x.dim() == 1:
-                    x.unsqueeze_(1)
-                u = self.net(x)
-                y = torch.softmax(u, dim=-1)
-                mu, loss_loc = self.mu_loss(y, item)
-                if g_type == "u":
-                    u.backward(y - mu)
-                elif g_type == "y":
-                    y.backward(-mu / y)
-                else:
-                    v = torch.log(y)
-                    v.backward(-mu)
-                loss += loss_loc
-            optimizer.step()
+            for batch_index in range(batch_count):
+                start_time = time()
+                loss = 0
+                optimizer.zero_grad()
+                for item in batches[batch_index]:
+                    x = torch.tensor(item.x,
+                                     device=self.device,
+                                     dtype=torch.float
+                                     )
+                    if x.dim() == 1:
+                        x.unsqueeze_(1)
+                    u = self.net(x)
+                    y = torch.softmax(u, dim=-1)
+                    mu, loss_loc = self.mu_loss(y, item)
+                    v = None
+                    if g_type == "u":
+                        u.backward(y - mu)
+                    elif g_type == "y":
+                        y.backward(-mu / y)
+                    else:
+                        v = torch.log(y)
+                        v.backward(-mu)
+                    loss += loss_loc
+                optimizer.step()
+
+                mean_loss = loss.item()/len(batches[batch_index])
+
+                del x, y, u, mu, loss_loc, loss
+                if v is not None:
+                    del v
+                if self.device == torch.device('cuda'):
+                    torch.cuda.empty_cache()
+                elif self.device == torch.device('mps'):
+                    torch.mps.empty_cache()
+
+                end_time = time()
+                if (epoch + 1) % mr == 0:
+                    print("Epoch: {0:d}, "
+                          "Batch: {1:d}, "
+                          "Loss: {2:.10f}, "
+                          "Time: {3:d} sec".format(
+                            epoch+1,
+                            batch_index+1,
+                            mean_loss,
+                            int(end_time - start_time)))
+
             if scheduler and (epoch + 1) % sr == 0:
                 scheduler.step()
-            if (epoch + 1) % mr == 0:
-                print("Epoch: {0:d}, "
-                      "Loss: {1:.10f}".format(epoch+1,
-                                              loss.item()
-                                              )
-                      )
 
     @abstractmethod
     def mu_loss(self, y: torch.tensor, item: SampleItem) -> \
