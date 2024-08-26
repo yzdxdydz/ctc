@@ -1,0 +1,14 @@
+from abc import ABC, abstractmethod
+from typing import Sequence, Tuple
+
+from ..sample_item import SampleItem
+from ..utils import Vector, Comparable
+
+
+class SampleGenerator(ABC):
+    @abstractmethod
+    def generate_batches(self, batch_size: int) -> Sequence[
+                  Tuple[Sequence[Vector], Sequence[Comparable]]
+                 ]:
+        pass
+

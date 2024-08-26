@@ -2,15 +2,15 @@
 This file provides the abstract base class for CTC algorithms.
 """
 
-
 from abc import ABC, abstractmethod
 from typing import Sequence, Tuple, Dict, Type, Optional
 from time import time
 import torch
 
-from .. utils import Comparable
+from .. utils import Comparable, Vector
 from .. rnn import RNN
 from ..sample_item import SampleItem
+from ..sample_generator import SampleGenerator
 
 
 class CTC(ABC):
@@ -71,9 +71,7 @@ class CTC(ABC):
                        ).to(self.device)
 
     def train(self,
-              training_sample: Sequence[
-                  Tuple[Sequence[float], Sequence[int]]
-              ],
+              sample_generator: SampleGenerator,
               epochs: int = 10000,
               mr: int = 50,
               lr: float = 1e-4,
@@ -83,7 +81,8 @@ class CTC(ABC):
               scheduler_type: Optional[
                   Type[torch.optim.lr_scheduler._LRScheduler]] = None,
               grad_type: str = "u",
-              batch_size: int = 1 << 7
+              batch_size: int = 1 << 7,
+              grad_clip: bool = True
               ):
 
         if self.net is None:
@@ -92,23 +91,9 @@ class CTC(ABC):
 
         optimizer = optimizer_type(params=self.net.parameters(), lr=lr)
         if scheduler_type is not None:
-            scheduler = scheduler_type(optimizer=optimizer, gamma=0.9)
+            scheduler = scheduler_type(optimizer=optimizer)
         else:
             scheduler = None
-
-        tr_data = [self.item_type(item[0],
-                                  item[1],
-                                  self.dictionary
-                                  ) for item in training_sample]
-
-        batch_count = len(tr_data) // batch_size
-        batches = [tr_data[batch_size*i:batch_size*i+batch_size]
-                   for i in range(batch_count)]
-        if len(tr_data) % batch_size != 0:
-            batches.append(tr_data[batch_size*batch_count:])
-            batch_count += 1
-
-        print(f"Total batch count: {batch_count}")
 
         if grad_type in ["u", "y", "v"]:
             g_type = grad_type
@@ -117,11 +102,18 @@ class CTC(ABC):
             g_type = "u"
 
         for epoch in range(epochs):
-            for batch_index in range(batch_count):
-                start_time = time()
-                loss = 0
+            start_time = time()
+            loss = 0
+            batches = sample_generator.generate_batches(batch_size)
+            sample_size = sum(len(batch) for batch in batches)
+            for batch in batches:
+                batch_loss = 0
+                tr_data = [self.item_type(item[0],
+                                          item[1],
+                                          self.dictionary
+                                          ) for item in batch]
                 optimizer.zero_grad()
-                for item in batches[batch_index]:
+                for item in tr_data:
                     x = torch.tensor(item.x,
                                      device=self.device,
                                      dtype=torch.float
@@ -139,29 +131,38 @@ class CTC(ABC):
                     else:
                         v = torch.log(y)
                         v.backward(-mu)
-                    loss += loss_loc
+                    batch_loss += loss_loc
+
+                if grad_clip:
+                    for param in self.net.parameters():
+                        if param.grad is not None:
+                            if torch.isnan(param.grad).any() or torch.isinf(
+                                    param.grad).any():
+                                print("Gradient contains NaN or inf!")
+                                break
+                    torch.nn.utils.clip_grad_norm_(self.net.parameters(),
+                                                   max_norm=1.0)
+
                 optimizer.step()
 
-                mean_loss = loss.item()/len(batches[batch_index])
+                loss += batch_loss.item()
 
-                del x, y, u, mu, loss_loc, loss
+                del x, y, u, mu, loss_loc, batch_loss
                 if v is not None:
                     del v
                 if self.device == torch.device('cuda'):
                     torch.cuda.empty_cache()
                 elif self.device == torch.device('mps'):
                     torch.mps.empty_cache()
+            end_time = time()
 
-                end_time = time()
-                if (epoch + 1) % mr == 0:
-                    print("Epoch: {0:d}, "
-                          "Batch: {1:d}, "
-                          "Loss: {2:.10f}, "
-                          "Time: {3:d} sec".format(
-                            epoch+1,
-                            batch_index+1,
-                            mean_loss,
-                            int(end_time - start_time)))
+            if (epoch + 1) % mr == 0:
+                print("Epoch: {0:d}, "
+                      "Loss: {1:.10f}, "
+                      "Time: {2:d} sec".format(
+                        epoch + 1,
+                        loss/sample_size,
+                        int(end_time - start_time)))
 
             if scheduler and (epoch + 1) % sr == 0:
                 scheduler.step()

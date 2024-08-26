@@ -1,12 +1,12 @@
 from typing import Sequence, Dict
 
 from .sample_item import SampleItem
-from ..utils import Comparable
+from ..utils import Comparable, Vector
 
 
 class LogmatrixSampleItem(SampleItem):
     def __init__(self,
-                 input: Sequence[float],
+                 input: Sequence[Vector],
                  target: Sequence[Comparable],
                  dictionary: Dict[Comparable, int]
                  ):

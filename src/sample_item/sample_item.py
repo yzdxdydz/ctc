@@ -1,12 +1,12 @@
 from typing import Sequence, Dict
 from abc import ABC, abstractmethod
 
-from ..utils import Comparable
+from ..utils import Comparable, Vector
 
 
 class SampleItem(ABC):
     def __init__(self,
-                 input: Sequence[float],
+                 input: Sequence[Vector],
                  target: Sequence[Comparable],
                  dictionary: Dict[Comparable, int]
                  ):
