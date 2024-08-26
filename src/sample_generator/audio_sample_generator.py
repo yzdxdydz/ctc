@@ -41,6 +41,6 @@ class AudioSampleGenerator(SampleGenerator):
                    for i in range(batch_count)]
 
         if len(sample) % batch_size != 0:
-            batches.append([sample[batch_count*batch_size:]])
+            batches.append(sample[batch_count*batch_size:])
 
         return batches
