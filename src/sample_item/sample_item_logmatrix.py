@@ -1,5 +1,5 @@
 from typing import Sequence, Dict
-
+import torch
 from .sample_item import SampleItem
 from ..utils import Comparable, Vector
 
@@ -8,9 +8,10 @@ class LogmatrixSampleItem(SampleItem):
     def __init__(self,
                  input: Sequence[Vector],
                  target: Sequence[Comparable],
-                 dictionary: Dict[Comparable, int]
+                 dictionary: Dict[Comparable, int],
+                 device
                  ):
-        super().__init__(input, target, dictionary)
+        super().__init__(input, target, dictionary, device)
 
     def preprocess_target(self,
                           target: Sequence[Comparable],
@@ -19,15 +20,21 @@ class LogmatrixSampleItem(SampleItem):
         p = []
         for el in target:
             p.append(dictionary[el])
-        self.mat_p = [[float('-inf')] * (2 * len(p) + 1)
+        self.mat_p = torch.tensor([[float('-inf')] * (2 * len(p) + 1)
                       for _ in range(len(dictionary)+1)
-                      ]
-        self.mat_a = [[float('-inf')] * (2 * len(p) + 1)
+                      ], dtype=torch.float,
+                                  device = self.device,
+                                  requires_grad=False)
+        self.mat_a = torch.tensor([[float('-inf')] * (2 * len(p) + 1)
                       for _ in range(2 * len(p) + 1)
-                      ]
-        self.mat_b = [[float('-inf')] * (2 * len(p) + 1)
+                      ], dtype=torch.float,
+                                  device = self.device,
+                                  requires_grad=False)
+        self.mat_b = torch.tensor([[float('-inf')] * (2 * len(p) + 1)
                       for _ in range(2 * len(p) + 1)
-                      ]
+                      ], dtype=torch.float,
+                                  device = self.device,
+                                  requires_grad=False)
         for s in range(2 * len(p) + 1):
             if s % 2 == 0:
                 self.mat_p[-1][s] = 0.

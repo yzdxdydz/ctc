@@ -10,7 +10,6 @@ import torch
 from .. utils import Comparable, Vector
 from .. rnn import RNN
 from ..sample_item import SampleItem
-from ..sample_generator import SampleGenerator
 
 
 class CTC(ABC):
@@ -71,8 +70,10 @@ class CTC(ABC):
                        ).to(self.device)
 
     def train(self,
-              sample_generator: SampleGenerator,
-              epochs: int = 10000,
+              sample: Sequence[
+                     Tuple[Sequence[Vector], Sequence[Comparable]]
+              ],
+              epochs: int = 100,
               mr: int = 50,
               lr: float = 1e-4,
               optimizer_type: Optional[
@@ -101,33 +102,28 @@ class CTC(ABC):
             print("Gradient type didn't recognized, set by default")
             g_type = "u"
 
-        for epoch in range(epochs):
-            start_time = time()
-            loss = 0
-            sample = sample_generator.generate_sample()
+        batch_count = len(sample) // batch_size
+        batches = [sample[i * batch_size:(i + 1) * batch_size]
+                   for i in range(batch_count)]
 
-            if batch_size is None:
-                batches = [sample]
-            else:
-                batch_count = len(sample) // batch_size
-                batches = [sample[i*batch_size:(i+1)*batch_size]
-                           for i in range(batch_count)]
+        if len(sample) % batch_size != 0:
+            batches.append(sample[batch_count * batch_size:])
+            batch_count += 1
 
-                if len(sample) % batch_size != 0:
-                    batches.append(sample[batch_count*batch_size:])
-
-            for batch in batches:
-                batch_loss = 0
-                tr_data = [self.item_type(item[0],
-                                          item[1],
-                                          self.dictionary
-                                          ) for item in batch]
+        for batch_num in range(batch_count):
+            tr_data = [self.item_type(item[0],
+                                      item[1],
+                                      self.dictionary,
+                                      self.device
+                                      ) for item in batches[batch_num]]
+            print(f"Batch: {batch_num + 1}")
+            for epoch in range(epochs):
+                start_time = time()
+                loss = torch.zeros(1, dtype = torch.float, device=self.device,
+                                   requires_grad=False)
                 optimizer.zero_grad()
                 for item in tr_data:
-                    x = torch.tensor(item.x,
-                                     device=self.device,
-                                     dtype=torch.float
-                                     )
+                    x = item.x
                     if x.dim() == 1:
                         x.unsqueeze_(1)
                     u = self.net(x)
@@ -141,7 +137,7 @@ class CTC(ABC):
                     else:
                         v = torch.log(y)
                         v.backward(-mu)
-                    batch_loss += loss_loc
+                    loss += loss_loc
 
                 if grad_clip:
                     for param in self.net.parameters():
@@ -154,28 +150,20 @@ class CTC(ABC):
                                                    max_norm=1.0)
 
                 optimizer.step()
+                end_time = time()
 
-                loss += batch_loss.item()
-
-                del x, y, u, mu, loss_loc, batch_loss
-                if v is not None:
-                    del v
-                if self.device == torch.device('cuda'):
-                    torch.cuda.empty_cache()
-                elif self.device == torch.device('mps'):
-                    torch.mps.empty_cache()
-            end_time = time()
-
-            if (epoch + 1) % mr == 0:
-                print("Epoch: {0:d}, "
-                      "Loss: {1:.10f}, "
-                      "Time: {2:d} sec".format(
+                if (epoch + 1) % mr == 0:
+                    print("Epoch: {0:d}, "
+                          "Loss: {1:.10f}, "
+                          "Time: {2:d} sec".format(
                         epoch + 1,
-                        loss/len(sample),
+                        loss.item() / len(tr_data),
                         int(end_time - start_time)))
 
-            if scheduler and (epoch + 1) % sr == 0:
-                scheduler.step()
+
+
+                if scheduler and (epoch + 1) % sr == 0:
+                    scheduler.step()
 
     @abstractmethod
     def mu_loss(self, y: torch.tensor, item: SampleItem) -> \
