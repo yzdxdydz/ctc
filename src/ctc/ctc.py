@@ -104,8 +104,18 @@ class CTC(ABC):
         for epoch in range(epochs):
             start_time = time()
             loss = 0
-            batches = sample_generator.generate_batches(batch_size)
-            sample_size = sum(len(batch) for batch in batches)
+            sample = sample_generator.generate_sample()
+
+            if batch_size is None:
+                batches = [sample]
+            else:
+                batch_count = len(sample) // batch_size
+                batches = [sample[i*batch_size:(i+1)*batch_size]
+                           for i in range(batch_count)]
+
+                if len(sample) % batch_size != 0:
+                    batches.append(sample[batch_count*batch_size:])
+
             for batch in batches:
                 batch_loss = 0
                 tr_data = [self.item_type(item[0],
@@ -139,7 +149,7 @@ class CTC(ABC):
                             if torch.isnan(param.grad).any() or torch.isinf(
                                     param.grad).any():
                                 print("Gradient contains NaN or inf!")
-                                break
+                                return
                     torch.nn.utils.clip_grad_norm_(self.net.parameters(),
                                                    max_norm=1.0)
 
@@ -161,7 +171,7 @@ class CTC(ABC):
                       "Loss: {1:.10f}, "
                       "Time: {2:d} sec".format(
                         epoch + 1,
-                        loss/sample_size,
+                        loss/len(sample),
                         int(end_time - start_time)))
 
             if scheduler and (epoch + 1) % sr == 0:

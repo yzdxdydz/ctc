@@ -7,7 +7,7 @@ from ..utils import Vector, Comparable
 
 class SampleGenerator(ABC):
     @abstractmethod
-    def generate_batches(self, batch_size: int) -> Sequence[
+    def generate_sample(self) -> Sequence[
                   Tuple[Sequence[Vector], Sequence[Comparable]]
                  ]:
         pass
