@@ -166,8 +166,8 @@ class CTC(ABC):
                                       ) for item in batches[batch_num]]
             total_length = sum(len(item[1]) for item in batches[batch_num])
 
+            start_time = time()
             for epoch in range(epochs):
-                start_time = time()
                 loss = torch.zeros(1,
                                    dtype=torch.float,
                                    device=self.device,
@@ -201,9 +201,9 @@ class CTC(ABC):
                                                    max_norm=1.0)
 
                 optimizer.step()
-                end_time = time()
 
                 if (epoch + 1) % mr == 0:
+                    end_time = time()
                     print("Epoch: {0:d}, "
                           "Loss: {1:.10f}, "
                           "Time: {2:d} sec".format(epoch + 1,
@@ -211,6 +211,7 @@ class CTC(ABC):
                                                    int(end_time - start_time)
                                                    )
                           )
+                    start_time = time()
 
                 if scheduler and (epoch + 1) % sr == 0:
                     scheduler.step()

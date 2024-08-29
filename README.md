@@ -4,3 +4,4 @@
 - Add documentation 
 - Rewrite readme
 - Optimize logmatmulexp
+- Implement CTC loss on metal
