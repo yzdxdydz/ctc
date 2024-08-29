@@ -16,13 +16,16 @@ class LogCTC(CTC):
     def mu_loss(self, y: torch.tensor, item: SampleItem) -> \
             Tuple[torch.tensor, torch.tensor]:
 
-        log_y = torch.log(y)
+        with torch.no_grad():
+            log_y = torch.log(y)
 
         # forward
-        gamma = torch.log(torch.zeros((y.shape[0],
-                                       2 * len(item.p) + 1)
-                                      )
-                          ).to(self.device)
+        gamma = torch.full((y.shape[0], 2 * len(item.p) + 1),
+                           fill_value=float('-inf'),
+                           dtype=torch.float,
+                           device=self.device,
+                           requires_grad=False
+                           )
         gamma[0, 0] = log_y[0, -1]
         gamma[0, 1] = log_y[0, item.p[0]]
         for t in range(1, y.shape[0]):
@@ -43,7 +46,12 @@ class LogCTC(CTC):
         loss = -torch.logsumexp(gamma[-1, -2:], dim=0)
 
         # backward
-        beta_t = torch.log(torch.zeros(2 * len(item.p) + 1)).to(self.device)
+        beta_t = torch.full((2 * len(item.p) + 1, ),
+                            fill_value=float('-inf'),
+                            dtype=torch.float,
+                            device=self.device,
+                            requires_grad=False
+                            )
         beta_t[-1] = log_y[-1, -1]
         beta_t[-2] = log_y[-1, item.p[-1]]
         beta_pr = torch.clone(beta_t)
@@ -65,23 +73,22 @@ class LogCTC(CTC):
             beta_pr = torch.clone(beta_t)
             gamma[t] += beta_t
 
-        mu = torch.log(torch.zeros_like(y))
+        mu = torch.full(y.shape,
+                        fill_value=float('-inf'),
+                        dtype=torch.float,
+                        device=self.device,
+                        requires_grad=False
+                        )
         for t in range(y.shape[0]):
             for s in range(2 * len(item.p) + 1):
                 if s % 2 == 0:
-                    mu[t, -1] = torch.logsumexp(torch.hstack(
-                        (
-                            mu[t, -1],
-                            gamma[t, s]
-                        )
-                    ), dim=0)
+                    mu[t, -1] = torch.logsumexp(
+                        torch.hstack((mu[t, -1], gamma[t, s])),
+                        dim=0)
                 else:
-                    mu[t, item.p[s // 2]] = torch.logsumexp(torch.hstack(
-                        (
-                            mu[t, item.p[s // 2]],
-                            gamma[t, s]
-                        )
-                    ), dim=0)
+                    mu[t, item.p[s // 2]] = torch.logsumexp(
+                        torch.hstack((mu[t, item.p[s // 2]], gamma[t, s])),
+                        dim=0)
 
         return torch.exp(loss - log_y + mu), loss
 

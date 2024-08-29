@@ -1,7 +1,7 @@
+import torch
+
 from typing import Sequence, Dict
 from abc import ABC, abstractmethod
-
-import torch
 
 from ..utils import Comparable, Vector
 
@@ -11,11 +11,12 @@ class SampleItem(ABC):
                  input: Sequence[Vector],
                  target: Sequence[Comparable],
                  dictionary: Dict[Comparable, int],
-                 device
+                 device: torch.device
                  ):
         self.device = device
-        self.x = torch.tensor(input, dtype=torch.float,
-                                  device = self.device)
+        self.x = torch.tensor(input,
+                              dtype=torch.float,
+                              device=self.device)
         self.preprocess_target(target, dictionary)
 
     @abstractmethod

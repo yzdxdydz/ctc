@@ -1,5 +1,5 @@
-from typing import Tuple, Sequence, Dict
 import torch
+from typing import Tuple, Sequence, Dict
 
 from .ctc import CTC
 from ..sample_item import SampleItem, LogmatrixSampleItem
@@ -22,11 +22,11 @@ class MatrixLogCTC(CTC):
             log_y = torch.log(y)
         log_y_mod = logmatmulexp(log_y, mat_p)
         # forward
-        gamma = torch.log(torch.zeros((y.shape[0],
-                                       mat_p.shape[1]),
-                                      device=self.device,
-                                  requires_grad=False)
-                          )
+        gamma = torch.full((y.shape[0], mat_p.shape[1]),
+                           fill_value=float('-inf'),
+                           dtype=torch.float,
+                           device=self.device,
+                           requires_grad=False)
         gamma[0, 0] = log_y_mod[0, 0]
         gamma[0, 1] = log_y_mod[0, 1]
         for t in range(1, y.shape[0]):
@@ -35,10 +35,11 @@ class MatrixLogCTC(CTC):
         loss = -torch.logsumexp(gamma[-1, -2:], dim=0)
 
         # backward
-        beta_t = torch.log(torch.zeros(mat_p.shape[1],
-                                      device=self.device,
-                                  requires_grad=False)
-                          )
+        beta_t = torch.full((mat_p.shape[1], ),
+                            fill_value=float('-inf'),
+                            dtype=torch.float,
+                            device=self.device,
+                            requires_grad=False)
         beta_t[-1] = log_y_mod[-1, -1]
         beta_t[-2] = log_y_mod[-1, -2]
         gamma[-1] += beta_t

@@ -1,5 +1,7 @@
-from typing import Sequence, Dict
 import torch
+
+from typing import Sequence, Dict
+
 from .sample_item import SampleItem
 from ..utils import Comparable, Vector
 
@@ -9,7 +11,7 @@ class LogmatrixSampleItem(SampleItem):
                  input: Sequence[Vector],
                  target: Sequence[Comparable],
                  dictionary: Dict[Comparable, int],
-                 device
+                 device: torch.device
                  ):
         super().__init__(input, target, dictionary, device)
 
@@ -17,24 +19,24 @@ class LogmatrixSampleItem(SampleItem):
                           target: Sequence[Comparable],
                           dictionary: Dict[Comparable, int]
                           ):
-        p = []
-        for el in target:
-            p.append(dictionary[el])
-        self.mat_p = torch.tensor([[float('-inf')] * (2 * len(p) + 1)
-                      for _ in range(len(dictionary)+1)
-                      ], dtype=torch.float,
-                                  device = self.device,
-                                  requires_grad=False)
-        self.mat_a = torch.tensor([[float('-inf')] * (2 * len(p) + 1)
-                      for _ in range(2 * len(p) + 1)
-                      ], dtype=torch.float,
-                                  device = self.device,
-                                  requires_grad=False)
-        self.mat_b = torch.tensor([[float('-inf')] * (2 * len(p) + 1)
-                      for _ in range(2 * len(p) + 1)
-                      ], dtype=torch.float,
-                                  device = self.device,
-                                  requires_grad=False)
+        p = [dictionary[el] for el in target]
+
+        self.mat_p = torch.full((len(dictionary)+1, 2 * len(p) + 1),
+                                fill_value=float('-inf'),
+                                dtype=torch.float,
+                                device=self.device,
+                                requires_grad=False)
+        self.mat_a = torch.full((2 * len(p) + 1, 2 * len(p) + 1),
+                                fill_value=float('-inf'),
+                                dtype=torch.float,
+                                device=self.device,
+                                requires_grad=False)
+        self.mat_b = torch.full((2 * len(p) + 1, 2 * len(p) + 1),
+                                fill_value=float('-inf'),
+                                dtype=torch.float,
+                                device=self.device,
+                                requires_grad=False)
+
         for s in range(2 * len(p) + 1):
             if s % 2 == 0:
                 self.mat_p[-1][s] = 0.

@@ -1,3 +1,5 @@
+import torch
+
 from typing import Sequence, Dict
 
 from .sample_item import SampleItem
@@ -8,14 +10,13 @@ class ClassicSampleItem(SampleItem):
     def __init__(self,
                  input: Sequence[Vector],
                  target: Sequence[Comparable],
-                 dictionary: Dict[Comparable, int]
+                 dictionary: Dict[Comparable, int],
+                 device: torch.device
                  ):
-        super().__init__(input, target, dictionary)
+        super().__init__(input, target, dictionary, device)
 
     def preprocess_target(self,
                           target: Sequence[Comparable],
                           dictionary: Dict[Comparable, int]
                           ):
-        self.p = []
-        for el in target:
-            self.p.append(dictionary[el])
+        self.p = [dictionary[el] for el in target]

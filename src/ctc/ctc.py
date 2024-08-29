@@ -2,10 +2,12 @@
 This file provides the abstract base class for CTC algorithms.
 """
 
+import numpy as np
+import torch
 from abc import ABC, abstractmethod
 from typing import Sequence, Tuple, Dict, Type, Optional
 from time import time
-import torch
+from copy import deepcopy
 
 from .. utils import Comparable, Vector
 from .. rnn import RNN
@@ -69,6 +71,52 @@ class CTC(ABC):
                        bidirectional=bidirectional
                        ).to(self.device)
 
+    def preprocess_sample(self,
+                          sample: Sequence[
+                              Tuple[np.ndarray, Sequence[Comparable]]
+                          ],
+                          max_item_size: int,
+                          batch_size: int,
+                          padding: Tuple[int, float, Comparable] = None):
+
+        # padding: (length, pause_value, pause_symbol)
+        indices = np.arange(len(sample))
+        np.random.shuffle(indices)
+        concat_sample = []
+        x, z = sample[indices[0]]
+        long_z = deepcopy(z)
+        long_x = x
+        for i in indices[1:]:
+            x, z = sample[indices[i]]
+            if x.shape[0] + long_x.shape[0] <= max_item_size:
+                if padding is None:
+                    long_x = np.concatenate((
+                        long_x, x
+                    ))
+                    long_z += z
+                else:
+                    long_x = np.concatenate((
+                        long_x,
+                        np.full((padding[0], ) + x.shape[1:], padding[1]),
+                        x
+                    ))
+                    long_z += [padding[2]] + z
+            else:
+                concat_sample.append((long_x, long_z))
+                long_x = x
+                long_z = deepcopy(z)
+        concat_sample.append((long_x, long_z))
+
+        batch_count = len(concat_sample) // batch_size
+        batches = [concat_sample[i * batch_size:(i + 1) * batch_size]
+                   for i in range(batch_count)]
+
+        if len(concat_sample) % batch_size != 0:
+            batches.append(concat_sample[batch_count * batch_size:])
+            batch_count += 1
+
+        return batches
+
     def train(self,
               sample: Sequence[
                      Tuple[Sequence[Vector], Sequence[Comparable]]
@@ -83,7 +131,9 @@ class CTC(ABC):
                   Type[torch.optim.lr_scheduler._LRScheduler]] = None,
               grad_type: str = "u",
               batch_size: int = 1 << 7,
-              grad_clip: bool = True
+              max_item_size: int = 1 << 8,
+              padding: Tuple[int, float, Comparable] = None,
+              grad_clip: bool = True,
               ):
 
         if self.net is None:
@@ -102,24 +152,25 @@ class CTC(ABC):
             print("Gradient type didn't recognized, set by default")
             g_type = "u"
 
-        batch_count = len(sample) // batch_size
-        batches = [sample[i * batch_size:(i + 1) * batch_size]
-                   for i in range(batch_count)]
+        batches = self.preprocess_sample(sample,
+                                         max_item_size,
+                                         batch_size,
+                                         padding)
 
-        if len(sample) % batch_size != 0:
-            batches.append(sample[batch_count * batch_size:])
-            batch_count += 1
-
-        for batch_num in range(batch_count):
+        for batch_num in range(len(batches)):
+            print(f"Batch: {batch_num + 1} / {len(batches)}")
             tr_data = [self.item_type(item[0],
                                       item[1],
                                       self.dictionary,
                                       self.device
                                       ) for item in batches[batch_num]]
-            print(f"Batch: {batch_num + 1}")
+            total_length = sum(len(item[1]) for item in batches[batch_num])
+
             for epoch in range(epochs):
                 start_time = time()
-                loss = torch.zeros(1, dtype = torch.float, device=self.device,
+                loss = torch.zeros(1,
+                                   dtype=torch.float,
+                                   device=self.device,
                                    requires_grad=False)
                 optimizer.zero_grad()
                 for item in tr_data:
@@ -155,12 +206,11 @@ class CTC(ABC):
                 if (epoch + 1) % mr == 0:
                     print("Epoch: {0:d}, "
                           "Loss: {1:.10f}, "
-                          "Time: {2:d} sec".format(
-                        epoch + 1,
-                        loss.item() / len(tr_data),
-                        int(end_time - start_time)))
-
-
+                          "Time: {2:d} sec".format(epoch + 1,
+                                                   loss.item() / total_length,
+                                                   int(end_time - start_time)
+                                                   )
+                          )
 
                 if scheduler and (epoch + 1) % sr == 0:
                     scheduler.step()

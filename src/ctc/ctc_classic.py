@@ -16,9 +16,10 @@ class ClassicCTC(CTC):
     def mu_loss(self, y: torch.tensor, item: SampleItem) -> \
             Tuple[torch.tensor, torch.tensor]:
         # forward
-        gamma = torch.zeros((y.shape[0],
-                             2 * len(item.p) + 1)
-                            ).to(self.device)
+        gamma = torch.zeros((y.shape[0], 2 * len(item.p) + 1),
+                            dtype=torch.float,
+                            device=self.device,
+                            requires_grad=False)
         gamma[0, 0] = y[0, -1]
         gamma[0, 1] = y[0, item.p[0]]
         c = gamma[0].sum()
@@ -45,7 +46,10 @@ class ClassicCTC(CTC):
         loss = -torch.log(gamma[-1, -1] + gamma[-1, -2]) - sum_log_c
 
         # backward
-        beta_t = torch.zeros(2 * len(item.p) + 1).to(self.device)
+        beta_t = torch.zeros((2 * len(item.p) + 1, ),
+                             dtype=torch.float,
+                             device=self.device,
+                             requires_grad=False)
         beta_t[-1] = y[-1, -1]
         beta_t[-2] = y[-1, item.p[-1]]
         d = beta_t.sum()
@@ -79,7 +83,7 @@ class ClassicCTC(CTC):
                 else:
                     zeta[t, s] /= y[t, item.p[s // 2]]
         z = zeta.sum(dim=-1)
-        mu = torch.zeros_like(y)
+        mu = torch.zeros_like(y, requires_grad=False)
         for t in range(y.shape[0]):
             for s in range(2 * len(item.p) + 1):
                 if s % 2 == 0:
@@ -88,7 +92,8 @@ class ClassicCTC(CTC):
                     mu[t, item.p[s // 2]] += gamma[t, s]
             mu[t] /= z[t]
 
-        return mu/y, loss
+        with torch.no_grad():
+            return mu/y, loss
 
     def set_item_type(self):
         self.item_type = ClassicSampleItem

@@ -1,3 +1,5 @@
+import torch
+
 from typing import Sequence, Dict
 
 from .sample_item import SampleItem
@@ -8,26 +10,30 @@ class MatrixSampleItem(SampleItem):
     def __init__(self,
                  input: Sequence[Vector],
                  target: Sequence[Comparable],
-                 dictionary: Dict[Comparable, int]
+                 dictionary: Dict[Comparable, int],
+                 device: torch.device
                  ):
-        super().__init__(input, target, dictionary)
+        super().__init__(input, target, dictionary, device)
 
     def preprocess_target(self,
                           target: Sequence[Comparable],
                           dictionary: Dict[Comparable, int]
                           ):
-        p = []
-        for el in target:
-            p.append(dictionary[el])
-        self.mat_p = [[0.] * (2 * len(p) + 1)
-                      for _ in range(len(dictionary)+1)
-                      ]
-        self.mat_a = [[0.] * (2 * len(p) + 1)
-                      for _ in range(2 * len(p) + 1)
-                      ]
-        self.mat_b = [[0.] * (2 * len(p) + 1)
-                      for _ in range(2 * len(p) + 1)
-                      ]
+        p = [dictionary[el] for el in target]
+
+        self.mat_p = torch.zeros((len(dictionary) + 1, 2 * len(p) + 1),
+                                 dtype=torch.float,
+                                 device=self.device,
+                                 requires_grad=False)
+        self.mat_a = torch.zeros((2 * len(p) + 1, 2 * len(p) + 1),
+                                 dtype=torch.float,
+                                 device=self.device,
+                                 requires_grad=False)
+        self.mat_b = torch.zeros((2 * len(p) + 1, 2 * len(p) + 1),
+                                 dtype=torch.float,
+                                 device=self.device,
+                                 requires_grad=False)
+
         for s in range(2 * len(p) + 1):
             if s % 2 == 0:
                 self.mat_p[-1][s] = 1.
