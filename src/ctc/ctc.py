@@ -133,8 +133,7 @@ class CTC(ABC):
               batch_size: int = 1 << 7,
               max_item_size: int = 1 << 8,
               padding: Tuple[int, float, Comparable] = None,
-              grad_clip: bool = True,
-              noise_rate: float = None
+              grad_clip: bool = True
               ):
 
         if self.net is None:
@@ -179,12 +178,7 @@ class CTC(ABC):
                     x = item.x
                     if x.dim() == 1:
                         x = x.unsqueeze(1)
-                    if noise_rate is not None:
-                        noise = torch.normal(0, 1, size=x.shape,
-                                             device=self.device)*noise_rate
-                        u = self.net(x + noise)
-                    else:
-                        u = self.net(x)
+                    u = self.net(x)
                     y = torch.softmax(u, dim=-1)
                     mu, loss_loc = self.mu_loss(y, item)
                     v = None
