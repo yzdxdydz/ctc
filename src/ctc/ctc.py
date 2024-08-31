@@ -134,6 +134,7 @@ class CTC(ABC):
               max_item_size: int = 1 << 8,
               padding: Tuple[int, float, Comparable] = None,
               grad_clip: bool = True,
+              noise_rate: float = None
               ):
 
         if self.net is None:
@@ -155,7 +156,8 @@ class CTC(ABC):
         batches = self.preprocess_sample(sample,
                                          max_item_size,
                                          batch_size,
-                                         padding)
+                                         padding
+                                         )
 
         for batch_num in range(len(batches)):
             print(f"Batch: {batch_num + 1} / {len(batches)}")
@@ -176,8 +178,13 @@ class CTC(ABC):
                 for item in tr_data:
                     x = item.x
                     if x.dim() == 1:
-                        x.unsqueeze_(1)
-                    u = self.net(x)
+                        x = x.unsqueeze(1)
+                    if noise_rate is not None:
+                        noise = torch.normal(0, 1, size=x.shape,
+                                             device=self.device)*noise_rate
+                        u = self.net(x + noise)
+                    else:
+                        u = self.net(x)
                     y = torch.softmax(u, dim=-1)
                     mu, loss_loc = self.mu_loss(y, item)
                     v = None

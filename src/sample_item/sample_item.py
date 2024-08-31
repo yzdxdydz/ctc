@@ -16,12 +16,17 @@ class SampleItem(ABC):
         self.device = device
         self.x = torch.tensor(input,
                               dtype=torch.float,
-                              device=self.device)
-        self.preprocess_target(target, dictionary)
+                              device=self.device,
+                              requires_grad=False)
+        p = torch.tensor([dictionary[el] for el in target],
+                         dtype=torch.long,
+                         device=self.device,
+                         requires_grad=False)
+        self.preprocess_target(p, len(dictionary)+1)
 
     @abstractmethod
     def preprocess_target(self,
-                          target: Sequence[Comparable],
-                          dictionary: Dict[Comparable, int]
+                          p: torch.tensor,
+                          y_size: int
                           ):
         pass

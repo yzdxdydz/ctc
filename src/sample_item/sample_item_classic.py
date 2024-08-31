@@ -16,7 +16,7 @@ class ClassicSampleItem(SampleItem):
         super().__init__(input, target, dictionary, device)
 
     def preprocess_target(self,
-                          target: Sequence[Comparable],
-                          dictionary: Dict[Comparable, int]
+                          p: torch.tensor,
+                          y_size: int
                           ):
-        self.p = [dictionary[el] for el in target]
+        self.p = p

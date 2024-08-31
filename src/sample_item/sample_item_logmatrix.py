@@ -16,53 +16,49 @@ class LogmatrixSampleItem(SampleItem):
         super().__init__(input, target, dictionary, device)
 
     def preprocess_target(self,
-                          target: Sequence[Comparable],
-                          dictionary: Dict[Comparable, int]
+                          p: torch.tensor,
+                          y_size: int
                           ):
-        p = [dictionary[el] for el in target]
+        size = 2 * p.shape[0] + 1
 
-        self.mat_p = torch.full((len(dictionary)+1, 2 * len(p) + 1),
+        self.mat_p = torch.full((y_size, size),
                                 fill_value=float('-inf'),
                                 dtype=torch.float,
                                 device=self.device,
                                 requires_grad=False)
-        self.mat_a = torch.full((2 * len(p) + 1, 2 * len(p) + 1),
+        self.mat_a = torch.full((size, size),
                                 fill_value=float('-inf'),
                                 dtype=torch.float,
                                 device=self.device,
                                 requires_grad=False)
-        self.mat_b = torch.full((2 * len(p) + 1, 2 * len(p) + 1),
+        self.mat_b = torch.full((size, size),
                                 fill_value=float('-inf'),
                                 dtype=torch.float,
                                 device=self.device,
                                 requires_grad=False)
 
-        for s in range(2 * len(p) + 1):
-            if s % 2 == 0:
-                self.mat_p[-1][s] = 0.
-            else:
-                self.mat_p[p[s // 2]][s] = 0.
+        indices = torch.arange(size, device=self.device)
+        odd_indices = indices[indices % 2 == 1]
 
-            if s == 0:
-                self.mat_a[s][s] = 0.
-            elif s == 1 or \
-                    s % 2 == 0 or \
-                    p[s // 2] == p[(s - 2) // 2]:
-                self.mat_a[s][s] = 0.
-                self.mat_a[s][s - 1] = 0.
-            else:
-                self.mat_a[s][s] = 0.
-                self.mat_a[s][s - 1] = 0.
-                self.mat_a[s][s - 2] = 0.
+        self.mat_p[-1, indices[indices % 2 == 0]] = 0.0
+        self.mat_p[p[odd_indices // 2], odd_indices] = 0.0
 
-            if s == 2 * len(p):
-                self.mat_b[s][s] = 0.
-            elif s == 2 * len(p) - 1 or \
-                    s % 2 == 0 or \
-                    p[s // 2] == p[(s + 2) // 2]:
-                self.mat_b[s][s] = 0.
-                self.mat_b[s][s + 1] = 0.
-            else:
-                self.mat_b[s][s] = 0.
-                self.mat_b[s][s + 1] = 0.
-                self.mat_b[s][s + 2] = 0.
+        self.mat_a[indices, indices] = 0.0
+        self.mat_a[indices[1:], indices[1:] - 1] = 0.0
+        condition_a = (p[odd_indices[1:] // 2] !=
+                       p[(odd_indices[1:] - 2) // 2])
+        self.mat_a[odd_indices[1:], odd_indices[1:] - 2] = \
+            torch.where(condition_a,
+                        0.0,
+                        float('-inf')
+                        )
+
+        self.mat_b[indices, indices] = 0.0
+        self.mat_b[indices[:-1], indices[:-1] + 1] = 0.0
+        condition_b = (p[odd_indices[:-1] // 2] !=
+                       p[(odd_indices[:-1] + 2) // 2])
+        self.mat_b[odd_indices[:-1], odd_indices[:-1] + 2] = \
+            torch.where(condition_b,
+                        0.0,
+                        float('-inf')
+                        )
